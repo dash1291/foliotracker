@@ -33,10 +33,7 @@
       </div>
     </div>
     <div class="actions">
-      {% if kite_configured %}
-        {% if kite_connected %}<form method="post" action="/zerodha/sync"><button type="submit">Sync Zerodha</button></form>
-        {% else %}<a class="btn" href="/zerodha/connect">Connect Zerodha</a>{% endif %}
-      {% endif %}
+      {% if kite_configured and not kite_connected %}<a class="btn" href="/zerodha/connect">Connect Zerodha</a>{% endif %}
       <form method="post" action="/prices/refresh"><button type="submit">Refresh NAVs</button></form>
       <a class="btn primary" href="/accounts/new">Add manual account</a>
     </div>

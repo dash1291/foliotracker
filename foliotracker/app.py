@@ -76,6 +76,7 @@ templates.env.globals["COMPOUNDING"] = manual.COMPOUNDING
 
 
 def portfolio(session) -> dict:
+    kite_warning = kite.auto_sync(session)
     groups = latest_holdings(session)
     manuals = manual.manual_holdings(session)
     b = allocation.breakdown(session, groups, manuals)
@@ -90,6 +91,9 @@ def portfolio(session) -> dict:
         freshness.append("statements " + " and ".join(d.strftime("%d %b %Y") for d in statement_dates))
     if nav_date:
         freshness.append(f"fund NAVs {nav_date:%d %b %Y}")
+    kite_run = kite.last_sync(session)
+    if kite_run:
+        freshness.append(f"Zerodha synced {kite_run.imported_at:%d %b %H:%M}")
     if balance_dates:
         freshness.append(f"oldest manual balance {min(balance_dates):%d %b %Y}")
     fresh_text = " · ".join(freshness)
@@ -102,7 +106,7 @@ def portfolio(session) -> dict:
     return {
         "groups": groups, "manuals": manuals, "b": b, "manual_total": manual_total, "cas_total": cas_total,
         "cas_current": cas_current, "nav_date": nav_date, "freshness": fresh_text[:1].upper() + fresh_text[1:], "cards": cards,
-        "today": date.today(),
+        "today": date.today(), "kite_warning": kite_warning,
     }
 
 
@@ -118,7 +122,7 @@ def holdings(request: Request, ok: str | None = None, error: str | None = None):
         ctx["top_classes"] = [
             (k, v) for k, v in sorted(ctx["b"].by_class.items(), key=lambda kv: -kv[1]) if v > 0
         ]
-        ctx.update(ok=ok, error=error, kite_connected=kite.current_session(session) is not None,
+        ctx.update(ok=ok, error=error or ctx["kite_warning"], kite_connected=kite.current_session(session) is not None,
                    kite_configured=bool(os.environ.get("KITE_API_KEY")))
         return templates.TemplateResponse(request, "holdings.html", ctx)
 
@@ -142,11 +146,6 @@ def zerodha_callback(request_token: str | None = None, status: str | None = None
         return RedirectResponse(f"/?error={e}", status_code=303)
     except Exception as e:
         return RedirectResponse(f"/?error=Zerodha login failed: {type(e).__name__}: {e}", status_code=303)
-    return _run_kite_sync()
-
-
-@app.post("/zerodha/sync")
-def zerodha_sync():
     return _run_kite_sync()
 
 

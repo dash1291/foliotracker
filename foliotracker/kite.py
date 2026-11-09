@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -171,3 +171,35 @@ def sync(session: Session, index: amfi.AmfiIndex | None = None) -> SyncResult:
     run.warnings = json.dumps(warnings)
     session.commit()
     return SyncResult(run, acct, len(rows), warnings=warnings)
+
+
+_last_attempt: datetime | None = None
+MAX_AGE = timedelta(minutes=15)
+
+
+def last_sync(session: Session) -> ImportRun | None:
+    return session.scalar(
+        select(ImportRun).where(ImportRun.file_type == "KITE").order_by(ImportRun.imported_at.desc()).limit(1)
+    )
+
+
+def auto_sync(session: Session) -> str | None:
+    """Sync on page load when a session exists and the last sync is stale. Returns a warning
+    to show, or None. Failures never block the page; one attempt per MAX_AGE window."""
+    global _last_attempt
+    if not os.environ.get("KITE_API_KEY") or current_session(session) is None:
+        return None
+    now = datetime.now()
+    last = last_sync(session)
+    if last and now - last.imported_at < MAX_AGE:
+        return None
+    if _last_attempt and now - _last_attempt < MAX_AGE:
+        return None
+    _last_attempt = now
+    try:
+        sync(session)
+        return None
+    except KiteLoginRequired:
+        return "Zerodha session expired; connect again for today's holdings"
+    except Exception as e:
+        return f"Zerodha sync failed: {type(e).__name__}: {e}"
