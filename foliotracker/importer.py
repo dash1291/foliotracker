@@ -95,7 +95,7 @@ class _Upserter:
             "mf",
             isin=isin,
             amfi_code=scheme.code if scheme else amfi_code,
-            name=scheme.name if scheme else _clean(fallback_name),
+            name=_clean(scheme.name) if scheme else _clean(fallback_name),
             amc=scheme.amc if scheme else None,
             category=scheme.category if scheme else None,
         )

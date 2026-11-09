@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import amfi
-from .db import Account, ImportRun, KiteSession, Position
+from .db import Account, ImportRun, Instrument, KiteSession, Position
 from .importer import _Upserter, _clean
 from .isin import security_kind
 
@@ -139,6 +139,7 @@ def _target_account(session: Session, profile: dict) -> Account:
 def sync(session: Session, index: amfi.AmfiIndex | None = None) -> SyncResult:
     profile, equity, funds = fetch_holdings(session)
     rows, warnings = map_holdings(equity, funds)
+    rows = [r for r in rows if r["kind"] in COVERS.split(",")]
     today = date.today()
     payload = json.dumps({"date": today.isoformat(), "rows": rows}, default=str, sort_keys=True)
     sha = hashlib.sha256(payload.encode()).hexdigest()
@@ -160,14 +161,17 @@ def sync(session: Session, index: amfi.AmfiIndex | None = None) -> SyncResult:
         if r["kind"] == "mf":
             inst = up.mf_instrument(r["isin"], r["name"])
         else:
-            inst = up.instrument(r["isin"], r["kind"], isin=r["isin"], symbol=r["symbol"], name=_clean(r["name"]))
+            known = session.scalar(select(Instrument).where(Instrument.key == r["isin"]))
+            inst = up.instrument(
+                r["isin"], r["kind"], isin=r["isin"], symbol=r["symbol"],
+                name=None if known else _clean(r["name"]),
+            )
         session.add(Position(
             import_run=run, account=acct, instrument=inst, as_of=today, quantity=r["quantity"],
             price=r["price"], value=r["value"], cost=r["cost"],
         ))
         total += r["value"]
     run.parsed_total = total
-    run.statement_total = total
     run.warnings = json.dumps(warnings)
     session.commit()
     return SyncResult(run, acct, len(rows), warnings=warnings)
