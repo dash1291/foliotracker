@@ -1,0 +1,90 @@
+classes:
+  equity_in: Domestic equity
+  equity_intl: International equity
+  debt: Debt
+  cash: Cash
+  gold: Gold
+  real_estate: Real estate
+  other: Other
+
+wrappers:
+  epf: {debt: 1}
+  ppf: {debt: 1}
+  fd: {debt: 1}
+  bank: {cash: 1}
+  sgb: {gold: 1}
+
+nps:
+  E: {equity_in: 1}
+  C: {debt: 1}
+  G: {debt: 1}
+  A: {other: 1}
+
+groups:
+  equity: {vector: {equity_in: 1}, confidence: exact}
+  debt: {vector: {debt: 1}, confidence: exact}
+  income/debt oriented: {vector: {debt: 1}, confidence: exact}
+  income: {vector: {debt: 1}, confidence: exact}
+  growth: {vector: {equity_in: 1}, confidence: exact}
+  gilt: {vector: {debt: 1}, confidence: exact}
+  elss: {vector: {equity_in: 1}, confidence: exact}
+
+categories:
+  - match: [arbitrage]
+    vector: {debt: 1}
+    confidence: exact
+  - match: [aggressive hybrid]
+    vector: {equity_in: 0.725, debt: 0.275}
+    confidence: estimated
+  - match: [balanced hybrid]
+    vector: {equity_in: 0.5, debt: 0.5}
+    confidence: estimated
+  - match: [conservative hybrid]
+    vector: {equity_in: 0.175, debt: 0.825}
+    confidence: estimated
+  - match: [equity savings]
+    vector: {equity_in: 0.3, debt: 0.7}
+    confidence: estimated
+  - match: [balanced advantage/ dynamic asset allocation, dynamic asset allocation or balanced advantage]
+    vector: {equity_in: 0.5, debt: 0.5}
+    confidence: override_required
+  - match: [multi asset allocation]
+    vector: {equity_in: 0.5, debt: 0.35, gold: 0.15}
+    confidence: override_required
+  - match: [retirement, childrens', children's, children’s]
+    vector: {equity_in: 0.5, debt: 0.5}
+    confidence: override_required
+  - match: [gold etf]
+    vector: {gold: 1}
+    confidence: exact
+  - match: [silver etf]
+    vector: {other: 1}
+    confidence: exact
+  - match: [equity etf, equity, index funds - equity]
+    vector: {equity_in: 1}
+    confidence: exact
+  - match: [debt etf, debt, index funds - debt, fixed term plan, other debt scheme]
+    vector: {debt: 1}
+    confidence: exact
+  - match: [etfs investing overseas, fof overseas, fund of funds investing overseas]
+    vector: {equity_intl: 1}
+    confidence: exact
+  - match: [hybrid etf, hybrid, index funds - hybrid]
+    vector: {equity_in: 0.5, debt: 0.5}
+    confidence: override_required
+
+names:
+  - pattern: "gold"
+    vector: {gold: 1}
+  - pattern: "silver"
+    vector: {other: 1}
+  - pattern: "liquid|overnight|1d rate|money market|treasury"
+    vector: {debt: 1}
+  - pattern: "sdl|g-sec|gsec|gilt|target maturity|bond|psu|crisil ibx|bharat bond|debt|income"
+    vector: {debt: 1}
+  - pattern: "nasdaq|s&p|us |u\\.s\\.|international|global|china|japan|developed|hang seng|ftse|msci world|emerging"
+    vector: {equity_intl: 1}
+  - pattern: "reit|invit|real estate"
+    vector: {real_estate: 1}
+  - pattern: "nifty|sensex|bse|midcap|smallcap|largecap|index|momentum|quality|alpha|value|low volatility|equal weight|sectoral|equity"
+    vector: {equity_in: 1}

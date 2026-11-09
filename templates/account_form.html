@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Add account · foliotracker{% endblock %}
+{% block content %}
+<div class="page-h"><h1 class="page">Add a manual account</h1><span class="meta">Anything a statement cannot see</span></div>
+{% if error %}<div class="flash warn">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <div class="card-h">
+    <div class="seg">
+      {% for key, label in MANUAL_WRAPPERS.items() %}
+        <a href="/accounts/new?wrapper={{ key }}" class="{% if wrapper == key %}active{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card-b">
+  <form class="f" method="post" action="/accounts">
+    <input type="hidden" name="wrapper" value="{{ wrapper }}">
+    <label>Name <input name="label" required autofocus placeholder="{% if wrapper == 'fd' %}Bajaj Finance FD Mar 2027{% elif wrapper == 'bank' %}HDFC savings{% else %}{{ MANUAL_WRAPPERS[wrapper] }}{% endif %}"></label>
+    <label>Institution <input name="institution" placeholder="optional"></label>
+    <label>Holders <input name="holders" placeholder="optional"></label>
+    {% if wrapper == 'other' %}
+    <label>Counts as
+      <select name="asset_class">
+        {% for key, label in CLASSES.items() %}<option value="{{ key }}" {% if key == default_class[wrapper] %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    {% else %}
+    <p class="hint"><span class="dot" style="--c: var(--c-{{ default_class[wrapper] }})"></span>Counts as {{ CLASSES[default_class[wrapper]].lower() }} in the allocation.</p>
+    {% endif %}
+
+    {% if wrapper == 'fd' %}
+      <div class="row"><label for="principal">Principal</label><input id="principal" name="principal" type="number" step="0.01" min="0" required></div>
+      <div class="row"><label for="rate">Rate, % per year</label><input id="rate" name="rate" type="number" step="0.01" min="0" required></div>
+      <div class="row"><label for="start_date">Start date</label><input id="start_date" name="start_date" type="date" required></div>
+      <div class="row"><label for="maturity_date">Maturity date</label><input id="maturity_date" name="maturity_date" type="date" required></div>
+      <label>Interest
+        <select name="compounding">
+          {% for key, label in COMPOUNDING.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <p class="hint">Value accrues daily from these terms and freezes at the maturity amount.</p>
+    {% else %}
+      <div class="row"><label for="value">Balance today</label><input id="value" name="value" type="number" step="0.01" min="0" required></div>
+      <div class="row"><label for="as_of">As of</label><input id="as_of" name="as_of" type="date" value="{{ today }}"></div>
+      <label>Note <input name="note" placeholder="optional, e.g. from passbook"></label>
+      <p class="hint">Enter a new balance whenever you check the account. Net worth uses the latest one and shows how old it is.</p>
+    {% endif %}
+
+    <div class="buttons">
+      <button class="primary" type="submit">Add account</button>
+      <a class="btn" href="/">Cancel</a>
+    </div>
+  </form>
+  </div>
+</div>
+{% endblock %}

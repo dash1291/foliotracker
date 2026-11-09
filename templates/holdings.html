@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Holdings · foliotracker{% endblock %}
+{% block content %}
+{% if error %}<div class="flash warn">{{ error }}</div>{% endif %}
+{% if ok %}<div class="flash">{{ ok }}</div>{% endif %}
+
+{% if not groups and not manuals %}
+<div class="card"><div class="card-b">
+  <p style="margin:0">No holdings yet. <a href="/imports">Import a CAS statement</a> or <a href="/accounts/new">add a manual account</a> to begin.</p>
+</div></div>
+{% else %}
+
+<div class="card">
+  <div class="hero">
+    <div style="min-width:0">
+      <div class="label">Net worth</div>
+      <div class="net">₹ {{ b.total|inr }}</div>
+      <a href="/allocation" class="alloc-strip" title="Open allocation">
+        <div class="stack">
+          {% for k, v in top_classes %}<div style="width: {{ v|pct(b.total) }}; --c: var(--c-{{ k }})"></div>{% endfor %}
+        </div>
+        <div class="alloc-labels">
+          {% for k, v in top_classes %}<span><span class="dot" style="--c: var(--c-{{ k }})"></span>{{ CLASSES[k] }} <b>{{ v|pct(b.total) }}</b></span>{% endfor %}
+        </div>
+      </a>
+      <div class="note">{{ freshness }}</div>
+      <div class="kpis">
+        {% set delta = cas_current - cas_total %}
+        <div class="kpi"><div class="k">Since statements</div>
+          <div class="v {% if delta > 0 %}pos{% elif delta < 0 %}neg{% endif %}">{{ '+' if delta > 0 }}{{ delta|inr }}</div>
+          <div class="s">{{ ((delta / cas_total * 100)|round(2)) if cas_total else 0 }}% from fund NAV moves · CAS total ₹ {{ cas_total|inr }}</div></div>
+        <div class="kpi"><div class="k">Manual accounts</div><div class="v">₹ {{ manual_total|inr }}</div><div class="s">{{ manuals|length }} account{{ 's' if manuals|length != 1 }} · {{ manual_total|pct(b.total) }} of net worth</div></div>
+      </div>
+    </div>
+    <div class="actions">
+      <form method="post" action="/prices/refresh"><button type="submit">Refresh NAVs</button></form>
+      <a class="btn primary" href="/accounts/new">Add manual account</a>
+    </div>
+  </div>
+</div>
+
+{% for kind, value, g in cards %}
+{% if kind == 'manual' %}
+<div class="card">
+  <div class="card-h">
+    <h2>Manual accounts</h2>
+    <span class="chip">{{ manuals|length }}</span>
+    <span class="meta">FDs accrue daily. Everything else is the last balance you entered.</span>
+    <span class="total">₹ {{ manual_total|inr }}</span>
+  </div>
+  <div class="card-b flush table-wrap">
+  <table>
+    <thead><tr><th>Account</th><th>Type</th><th>Detail</th><th>Balance as of</th><th class="num">Value</th><th></th></tr></thead>
+    <tbody>
+    {% for m in manuals|sort(attribute='value', reverse=true) %}
+      {% set age = (today - m.as_of).days %}
+      <tr>
+        <td class="name"><a class="n" href="/accounts/{{ m.account.id }}">{{ m.account.display_name }}</a>{% if m.account.institution or m.account.holders %}<span class="sub">{{ [m.account.institution, m.account.holders]|select|join(' · ') }}</span>{% endif %}</td>
+        <td class="nowrap"><span class="dot" style="--c: var(--c-{{ m.account.asset_class or 'other' }})"></span>{{ MANUAL_WRAPPERS[m.account.wrapper] }}</td>
+        <td class="muted {% if m.matured %}warn{% endif %}">{{ m.detail }}</td>
+        <td class="nowrap">{% if m.account.deposit %}<span class="muted">computed daily</span>{% else %}{{ m.as_of.strftime('%d %b %Y') }}{% if age > 45 %} <span class="chip warn">{{ age }} days old</span>{% endif %}{% endif %}</td>
+        <td class="num">{{ m.value|inr }}</td>
+        <td class="nowrap"><a href="/accounts/{{ m.account.id }}">{% if m.account.deposit %}Details{% else %}Update{% endif %}</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% else %}
+{% set age = (today - g.as_of).days %}
+{% set has_cost = g.positions|selectattr('cost')|list|length > 0 %}
+<div class="card">
+  <div class="card-h">
+    <h2>{{ g.account|account_title }}</h2>
+    <span class="chip {% if age > 45 %}warn{% endif %}">statement {{ g.as_of.strftime('%d %b %Y') }}{% if age > 45 %} · {{ age }} days{% endif %}</span>
+    {% if g.account.statement_total is not none and g.account.statement_total != g.total %}<span class="chip warn">statement says ₹ {{ g.account.statement_total|inr }}</span>{% endif %}
+    <span class="meta">{{ [g.account.holders|title if g.account.holders else none, g.account.institution|title ~ ' · ' ~ g.account.identifier]|select|join(' · ') }}</span>
+    <span class="total">₹ {{ g.current_total|inr }}</span>
+  </div>
+  <div class="card-b flush table-wrap">
+  <table>
+    <thead><tr><th>Instrument</th><th>Asset class</th><th class="num">Quantity</th>{% if has_cost %}<th class="num">Avg cost</th>{% endif %}<th class="num">Price</th><th class="num">Value</th></tr></thead>
+    <tbody>
+    {% for p in g.positions|sort(attribute='current_value', reverse=true) %}
+      {% set r = classes[p.instrument_id] %}
+      {% set d = ((p.current_value - p.value) / p.value * 100) if p.value else 0 %}
+      <tr>
+        <td class="name"><span class="n">{{ p.instrument.name }}</span>
+          <span class="sub">{% if p.instrument.kind == 'bond' %}Bond{% if p.instrument.coupon %} · {{ p.instrument.coupon }}%{% endif %}{% if p.instrument.maturity_date %} · matures {{ p.instrument.maturity_date }}{% endif %}{% elif p.instrument.kind == 'equity' %}Listed share{% else %}{{ p.instrument.category|cat or 'Mutual fund' }}{% endif %}</span></td>
+        <td class="nowrap"><span class="dot" style="--c: var(--c-{{ r.dominant }})"></span>{{ r.summary }}{% if r.confidence == 'estimated' %} <span class="chip warn">est.</span>{% elif r.confidence == 'override_required' %} <span class="chip warn">check</span>{% elif r.confidence == 'manual' %} <span class="chip manual">manual</span>{% endif %}</td>
+        <td class="num">{{ p.quantity|qty }}</td>
+        {% if has_cost %}<td class="num muted">{% if p.cost and p.quantity %}{{ (p.cost / p.quantity)|inr }}{% endif %}</td>{% endif %}
+        <td class="num">{% if p.current_price %}{{ p.current_price|inr }}<span class="sub">{{ p.current_date.strftime('%d %b') }}</span>{% else %}{{ p.price|inr }}<span class="sub">statement</span>{% endif %}</td>
+        <td class="num">{{ p.current_value|inr }}{% if d|abs >= 0.005 %}<span class="sub {% if d > 5 %}pos{% elif d < -5 %}neg{% endif %}">{{ '+' if d > 0 }}{{ d|round(2) }}% since statement</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+      {% set gd = ((g.current_total - g.total) / g.total * 100) if g.total else 0 %}
+      <tr class="total"><td colspan="{{ 4 if has_cost else 3 }}" class="muted">Total</td><td></td><td class="num">{{ g.current_total|inr }}{% if gd|abs >= 0.005 %}<span class="sub">{{ '+' if gd > 0 }}{{ gd|round(2) }}% since statement</span>{% endif %}</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endblock %}

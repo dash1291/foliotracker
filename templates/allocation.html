@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Allocation · foliotracker{% endblock %}
+{% block content %}
+{% if not b.rows %}
+<div class="card"><div class="card-b"><p style="margin:0">No holdings yet. <a href="/imports">Import a CAS statement</a> to begin.</p></div></div>
+{% else %}
+
+<div class="card">
+  <div class="hero">
+    <div style="min-width:0">
+      <div class="label">Allocation</div>
+      <div class="net">₹ {{ b.total|inr }}</div>
+      <div class="note">
+        {% if b.override_required %}<span class="warn">{{ b.override_required }} holding{{ 's' if b.override_required != 1 }} need an override</span>{% else %}Every holding classified from its category{% endif %}{% if b.estimated %} · <span class="warn">{{ b.estimated }} estimated</span>{% endif %}
+        <br>{{ freshness }}
+      </div>
+    </div>
+    <div class="actions">
+      <div class="seg">
+        <a href="/allocation?by=class" class="{% if by == 'class' %}active{% endif %}">Asset class</a>
+        <a href="/allocation?by=wrapper" class="{% if by == 'wrapper' %}active{% endif %}">Wrapper</a>
+        <a href="/allocation?by=holder" class="{% if by == 'holder' %}active{% endif %}">Holder</a>
+      </div>
+    </div>
+  </div>
+  <div class="card-b" style="padding-top:0">
+    {% set keys = {} %}
+    {% if by == 'class' %}{% for k, v in CLASSES.items() %}{% set _ = keys.update({v: k}) %}{% endfor %}{% endif %}
+    <div class="stack">
+      {% for label, value in bars.items() if value > 0 %}
+        <div style="width: {{ value|pct(b.total) }}; --c: {% if by == 'class' %}var(--c-{{ keys[label] }}){% else %}var(--c-{{ ['equity_in','debt','gold','equity_intl','cash','real_estate','other'][loop.index0 % 7] }}){% endif %}" title="{{ label }} {{ value|pct(b.total) }}"></div>
+      {% endfor %}
+    </div>
+    <div class="legend">
+      {% for label, value in bars.items() %}
+        {% set c = 'var(--c-' ~ (keys[label] if by == 'class' else ['equity_in','debt','gold','equity_intl','cash','real_estate','other'][loop.index0 % 7]) ~ ')' %}
+        <div class="l"><span class="dot" style="--c: {{ c }}"></span>{{ label }}</div>
+        <div class="bar"><div style="width: {{ value|pct(b.total) }}; --c: {{ c }}"></div></div>
+        <div class="num">{{ value|pct(b.total) }}</div>
+        <div class="num muted">{{ value|inr }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-h"><h2>How each holding counts</h2><span class="meta">Rows that need attention sort first</span></div>
+  <div class="card-b flush table-wrap">
+  <table>
+    <thead><tr><th>Holding</th><th>Account</th><th class="num">Value</th><th class="num">Share</th><th>Asset class</th><th>Basis</th><th></th></tr></thead>
+    <tbody>
+    {% for r in b.rows %}
+      <tr>
+        <td class="name">{% if r.instrument %}<span class="n">{{ r.instrument.name }}</span>{% if r.instrument.category %}<span class="sub">{{ r.instrument.category|cat }}</span>{% endif %}{% else %}<a class="n" href="/accounts/{{ r.account.id }}">{{ r.account.display_name }}</a><span class="sub">{{ MANUAL_WRAPPERS[r.account.wrapper] }}</span>{% endif %}</td>
+        <td class="muted">{% if r.instrument %}{{ r.account|account_title }}{% else %}Manual{% endif %}</td>
+        <td class="num">{{ r.value|inr }}</td>
+        <td class="num">{{ r.value|pct(b.total) }}</td>
+        <td class="nowrap"><span class="dot" style="--c: var(--c-{{ r.resolved.dominant }})"></span>{{ r.resolved.summary }}</td>
+        <td class="muted">{{ r.resolved.basis }}{% if r.resolved.confidence == 'estimated' %} <span class="chip warn">estimated</span>{% elif r.resolved.confidence == 'override_required' %} <span class="chip warn">override required</span>{% elif r.resolved.confidence == 'manual' %} <span class="chip manual">manual</span>{% endif %}</td>
+        <td class="nowrap">{% if r.instrument and r.instrument.kind in ('mf', 'nps_scheme') %}<a href="/instruments/{{ r.instrument.id }}/allocation">Override</a>{% elif not r.instrument %}<a href="/accounts/{{ r.account.id }}">Edit</a>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

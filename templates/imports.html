@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Imports · foliotracker{% endblock %}
+{% block content %}
+{% if error %}<div class="flash warn">{{ error }}</div>{% endif %}
+{% if ok %}<div class="flash">{{ ok }}</div>{% endif %}
+
+<div class="card">
+  <div class="card-h"><h2>Import a CAS statement</h2></div>
+  <div class="card-b">
+    <p class="muted" style="margin:0 0 14px; max-width: 640px">CAMS or KFintech detailed CAS, or a CDSL or NSDL e-CAS, as the original mail-back PDF. The password opens the file once and is not stored. The PDF is parsed and discarded.</p>
+    <form class="f" method="post" action="/imports" enctype="multipart/form-data">
+      <label>Statement PDF <input type="file" name="file" accept="application/pdf" required></label>
+      <label>PDF password <input type="password" name="password" required autocomplete="off"></label>
+      <div class="buttons"><button class="primary" type="submit">Import</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-h"><h2>Previous imports</h2></div>
+  {% if not runs %}<div class="card-b muted">None yet.</div>{% else %}
+  <div class="card-b flush table-wrap">
+  <table>
+    <thead><tr><th>Imported</th><th>File</th><th>Source</th><th>Period</th><th class="num">Statement total</th><th class="num">Parsed total</th><th>Check</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td class="nowrap">{{ r.imported_at.strftime('%d %b %Y %H:%M') }}</td>
+        <td class="name">{{ r.filename }}</td>
+        <td class="nowrap">{{ r.file_type }} {{ r.cas_type or '' }}</td>
+        <td class="nowrap">{{ r.period_from.strftime('%d %b') }} to {{ r.period_to.strftime('%d %b %Y') }}</td>
+        <td class="num">{{ r.statement_total|inr }}</td>
+        <td class="num">{{ r.parsed_total|inr }}</td>
+        <td>
+          {% if r.warning_list %}
+            <span class="chip warn">{{ r.warning_list|length }} warning{{ 's' if r.warning_list|length != 1 }}</span>
+            <ul class="warnings">{% for w in r.warning_list %}<li>{{ w }}</li>{% endfor %}</ul>
+          {% elif r.statement_total is not none %}
+            <span class="chip good">Reconciled</span>
+          {% else %}
+            <span class="muted">No statement total</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

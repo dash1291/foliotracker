@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ acct.display_name }} · foliotracker{% endblock %}
+{% block content %}
+{% if error %}<div class="flash warn">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <div class="hero">
+    <div>
+      <div class="label"><span class="dot" style="--c: var(--c-{{ acct.asset_class or 'other' }})"></span>{{ MANUAL_WRAPPERS[acct.wrapper] }}{% if acct.institution %} · {{ acct.institution }}{% endif %}{% if acct.holders %} · {{ acct.holders }}{% endif %}</div>
+      <div class="net">₹ {{ holding.value|inr }}</div>
+      <div class="note {% if holding.matured %}warn{% endif %}">{{ acct.display_name }} · {{ holding.detail }} · as of {{ holding.as_of.strftime('%d %b %Y') }}</div>
+    </div>
+    <div class="actions"><a class="btn" href="/">Back to holdings</a></div>
+  </div>
+</div>
+
+{% if acct.deposit %}
+<div class="card">
+  <div class="card-h"><h2>Terms</h2><span class="meta">Value is computed from these every day</span></div>
+  <div class="card-b">
+  {% if acct.deposit.compounding not in COMPOUNDING %}<div class="flash warn" style="margin-bottom:12px">This deposit was saved before payout frequencies existed. Pick one below so accrued interest is counted.</div>{% endif %}
+  <form class="f" method="post" action="/accounts/{{ acct.id }}/deposit">
+    <div class="row"><label for="principal">Principal</label><input id="principal" name="principal" type="number" step="0.01" min="0" value="{{ acct.deposit.principal }}" required></div>
+    <div class="row"><label for="rate">Rate, % per year</label><input id="rate" name="rate" type="number" step="0.01" min="0" value="{{ acct.deposit.rate }}" required></div>
+    <div class="row"><label for="start_date">Start date</label><input id="start_date" name="start_date" type="date" value="{{ acct.deposit.start_date }}" required></div>
+    <div class="row"><label for="maturity_date">Maturity date</label><input id="maturity_date" name="maturity_date" type="date" value="{{ acct.deposit.maturity_date }}" required></div>
+    <label>Interest
+      <select name="compounding">
+        {% for key, label in COMPOUNDING.items() %}<option value="{{ key }}" {% if key == acct.deposit.compounding %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="buttons"><button class="primary" type="submit">Save terms</button></div>
+  </form>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-h"><h2>Update balance</h2></div>
+  <div class="card-b">
+  <form class="f" method="post" action="/accounts/{{ acct.id }}/snapshots">
+    <div class="row"><label for="value">Balance</label><input id="value" name="value" type="number" step="0.01" min="0" required autofocus></div>
+    <div class="row"><label for="as_of">As of</label><input id="as_of" name="as_of" type="date" value="{{ today }}"></div>
+    <label>Note <input name="note" placeholder="optional"></label>
+    <div class="buttons"><button class="primary" type="submit">Save balance</button></div>
+  </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-h"><h2>Balance history</h2></div>
+  {% if not snapshots %}<div class="card-b muted">No balances yet.</div>{% else %}
+  <div class="card-b flush table-wrap">
+  <table>
+    <thead><tr><th>Date</th><th class="num">Balance</th><th>Note</th></tr></thead>
+    <tbody>{% for s in snapshots %}<tr><td class="nowrap">{{ s.date.strftime('%d %b %Y') }}</td><td class="num">{{ s.value|inr }}</td><td class="muted">{{ s.note or '' }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-h"><h2>Details</h2></div>
+  <div class="card-b">
+  <form class="f" method="post" action="/accounts/{{ acct.id }}/edit">
+    <label>Name <input name="label" value="{{ acct.label or '' }}" required></label>
+    <label>Institution <input name="institution" value="{{ acct.institution or '' }}"></label>
+    <label>Holders <input name="holders" value="{{ acct.holders or '' }}"></label>
+    {% if acct.wrapper == 'other' %}
+    <label>Counts as
+      <select name="asset_class">
+        {% for key, label in CLASSES.items() %}<option value="{{ key }}" {% if key == acct.asset_class %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <div class="buttons"><button type="submit">Save details</button></div>
+  </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-h"><h2>Delete</h2><span class="meta">Removes the account and its balance history</span></div>
+  <div class="card-b">
+  <form method="post" action="/accounts/{{ acct.id }}/delete" style="display:flex; gap:14px; align-items:center; flex-wrap:wrap">
+    <label style="display:flex; gap:8px; align-items:center; font-size:13px"><input type="checkbox" name="confirm"> I want to delete this account</label>
+    <button class="danger" type="submit">Delete account</button>
+  </form>
+  </div>
+</div>
+{% endblock %}
