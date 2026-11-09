@@ -84,7 +84,7 @@ def portfolio(session) -> dict:
     cas_total = sum((g.total for g in groups), Decimal(0))
     cas_current = sum((g.current_total for g in groups), Decimal(0))
     nav_date = prices.latest_nav_date(session)
-    statement_dates = sorted({g.as_of for g in groups})
+    statement_dates = sorted({g.import_run.period_to for g in groups})
     balance_dates = [m.as_of for m in manuals if not m.account.deposit]
     freshness = []
     if statement_dates:
