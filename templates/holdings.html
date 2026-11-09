@@ -33,6 +33,10 @@
       </div>
     </div>
     <div class="actions">
+      {% if kite_configured %}
+        {% if kite_connected %}<form method="post" action="/zerodha/sync"><button type="submit">Sync Zerodha</button></form>
+        {% else %}<a class="btn" href="/zerodha/connect">Connect Zerodha</a>{% endif %}
+      {% endif %}
       <form method="post" action="/prices/refresh"><button type="submit">Refresh NAVs</button></form>
       <a class="btn primary" href="/accounts/new">Add manual account</a>
     </div>
@@ -73,8 +77,11 @@
 <div class="card">
   <div class="card-h">
     <h2>{{ g.account|account_title }}</h2>
-    <span class="chip {% if age > 45 %}warn{% endif %}">statement {{ g.as_of.strftime('%d %b %Y') }}{% if age > 45 %} · {{ age }} days{% endif %}</span>
-    {% if g.account.statement_total is not none and g.account.statement_total != g.total %}<span class="chip warn">statement says ₹ {{ g.account.statement_total|inr }}</span>{% endif %}
+    {% for src in g.sources %}
+      {% set src_age = (today - src.period_to).days %}
+      <span class="chip {% if src_age > 45 %}warn{% endif %}">{{ 'Kite' if src.file_type == 'KITE' else 'statement' }} {{ src.period_to.strftime('%d %b %Y') }}{% if src_age > 45 %} · {{ src_age }} days{% endif %}</span>
+    {% endfor %}
+    {% if not g.has_overlay and g.account.statement_total is not none and g.account.statement_total != g.total %}<span class="chip warn">statement says ₹ {{ g.account.statement_total|inr }}</span>{% endif %}
     <span class="meta">{{ [g.account.holders|title if g.account.holders else none, g.account.institution|title ~ ' · ' ~ g.account.identifier]|select|join(' · ') }}</span>
     <span class="total">₹ {{ g.current_total|inr }}</span>
   </div>

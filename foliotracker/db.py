@@ -55,8 +55,13 @@ class ImportRun(Base):
     statement_total: Mapped[Decimal | None] = mapped_column(Money)
     parsed_total: Mapped[Decimal] = mapped_column(Money)
     warnings: Mapped[str] = mapped_column(Text, default="[]")
+    covers: Mapped[str | None] = mapped_column(String(64))
 
     positions: Mapped[list[Position]] = relationship(back_populates="import_run")
+
+    @property
+    def covered_kinds(self) -> set[str] | None:
+        return set(self.covers.split(",")) if self.covers else None
 
     @property
     def is_rta(self) -> bool:
@@ -191,6 +196,16 @@ class Allocation(Base):
     source: Mapped[str] = mapped_column(String(16))
     as_of: Mapped[date] = mapped_column(Date)
     note: Mapped[str | None] = mapped_column(String(255))
+
+
+class KiteSession(Base):
+    __tablename__ = "kite_session"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(32))
+    user_name: Mapped[str | None] = mapped_column(String(128))
+    access_token: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 class NetWorthHistory(Base):

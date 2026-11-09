@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
-from . import allocation, history, manual, prices
+from . import allocation, history, kite, manual, prices
 from .db import Account, Allocation, Deposit, ImportRun, Instrument, session_factory
 from .holdings import latest_holdings
 from .importer import AlreadyImported, import_cas
@@ -118,8 +118,55 @@ def holdings(request: Request, ok: str | None = None, error: str | None = None):
         ctx["top_classes"] = [
             (k, v) for k, v in sorted(ctx["b"].by_class.items(), key=lambda kv: -kv[1]) if v > 0
         ]
-        ctx.update(ok=ok, error=error)
+        ctx.update(ok=ok, error=error, kite_connected=kite.current_session(session) is not None,
+                   kite_configured=bool(os.environ.get("KITE_API_KEY")))
         return templates.TemplateResponse(request, "holdings.html", ctx)
+
+
+@app.get("/zerodha/connect")
+def zerodha_connect():
+    try:
+        return RedirectResponse(kite.login_url(), status_code=303)
+    except kite.KiteNotConfigured as e:
+        return RedirectResponse(f"/?error={e}", status_code=303)
+
+
+@app.get("/zerodha/callback")
+def zerodha_callback(request_token: str | None = None, status: str | None = None):
+    if not request_token:
+        return RedirectResponse(f"/?error=Zerodha login did not return a token ({status or 'cancelled'})", status_code=303)
+    try:
+        with Session() as session:
+            kite.exchange_request_token(session, request_token)
+    except kite.KiteNotConfigured as e:
+        return RedirectResponse(f"/?error={e}", status_code=303)
+    except Exception as e:
+        return RedirectResponse(f"/?error=Zerodha login failed: {type(e).__name__}: {e}", status_code=303)
+    return _run_kite_sync()
+
+
+@app.post("/zerodha/sync")
+def zerodha_sync():
+    return _run_kite_sync()
+
+
+def _run_kite_sync():
+    try:
+        with Session() as session:
+            r = kite.sync(session)
+    except kite.KiteLoginRequired:
+        return RedirectResponse("/zerodha/connect", status_code=303)
+    except kite.KiteNotConfigured as e:
+        return RedirectResponse(f"/?error={e}", status_code=303)
+    except Exception as e:
+        return RedirectResponse(f"/?error=Zerodha sync failed: {type(e).__name__}: {e}", status_code=303)
+    if r.unchanged:
+        msg = f"Zerodha holdings unchanged since the last sync today ({r.positions} holdings)"
+    else:
+        msg = f"Zerodha synced: {r.positions} holdings into {r.account.display_name}"
+    if r.warnings:
+        msg += f", {len(r.warnings)} warning{'s' if len(r.warnings) != 1 else ''}"
+    return RedirectResponse(f"/?ok={msg}", status_code=303)
 
 
 @app.get("/accounts/new", response_class=HTMLResponse)
