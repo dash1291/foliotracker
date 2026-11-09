@@ -9,7 +9,7 @@
     <div>
       <div class="label">Net worth over time</div>
       <div class="net">₹ {{ last.total|inr }}</div>
-      <div class="note">{{ first.date.strftime('%d %b %Y') }} to {{ last.date.strftime('%d %b %Y') }} · {{ rows|length }} point{{ 's' if rows|length != 1 }}, one per day the app was opened</div>
+      <div class="note">{{ first.date.strftime('%d %b %Y') }} to {{ last.date.strftime('%d %b %Y') }} · {{ rows|length }} point{{ 's' if rows|length != 1 }} from statements and days the app was opened</div>
     </div>
   </div>
   <div class="card-b" style="padding-top:0">
@@ -19,6 +19,39 @@
     </div>
   </div>
 </div>
+
+{% if years %}
+<div class="card">
+  <div class="card-h">
+    <h2>Growth by financial year</h2>
+    <span class="meta">Change split into new money (units bought or sold, deposits opened or closed), gains (price moves, NAV changes, interest accrued) and unsplit (balance-only accounts)</span>
+  </div>
+  <div class="card-b flush table-wrap">
+  <table>
+    <thead><tr><th>Period</th><th>From</th><th>To</th><th class="num">Start</th><th class="num">End</th><th class="num">Change</th><th class="num">New money</th><th class="num">Gains</th><th class="num">Unsplit</th><th class="num">Return</th></tr></thead>
+    <tbody>
+    {% macro row(label, c, note='') %}
+      <tr>
+        <td class="nowrap"><span class="n">{{ label }}</span>{% if note %}<span class="sub">{{ note }}</span>{% endif %}</td>
+        <td class="nowrap muted">{{ c.start.strftime('%d %b %Y') }}</td>
+        <td class="nowrap muted">{{ c.end.strftime('%d %b %Y') }}</td>
+        <td class="num">{{ c.start_total|inr }}</td>
+        <td class="num">{{ c.end_total|inr }}</td>
+        <td class="num {% if c.change > 0 %}pos{% elif c.change < 0 %}neg{% endif %}">{{ '+' if c.change > 0 }}{{ c.change|inr }}</td>
+        <td class="num">{{ '+' if c.new_money > 0 }}{{ c.new_money|inr }}</td>
+        <td class="num {% if c.gains > 0 %}pos{% elif c.gains < 0 %}neg{% endif %}">{{ '+' if c.gains > 0 }}{{ c.gains|inr }}</td>
+        <td class="num muted">{% if c.unsplit %}{{ '+' if c.unsplit > 0 }}{{ c.unsplit|inr }}{% else %}–{% endif %}</td>
+        <td class="num">{% if c.return_pct is not none %}{{ '+' if c.return_pct > 0 }}{{ c.return_pct }}%{% endif %}</td>
+      </tr>
+    {% endmacro %}
+    {% if last_year %}{{ row('Last 12 months', last_year, 'nearest statements') }}{% endif %}
+    {% for label, c in years %}{{ row(label, c, 'to date' if c.end == today else '') }}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="card-b" style="padding-top:8px"><p class="hint" style="margin:0">Return is gains over average capital. Manual accounts count from the first balance you entered; add a dated past balance on an account's page to extend them backwards. Periods start and end at statement dates, so a year without a 31 March statement uses the nearest one.</p></div>
+</div>
+{% endif %}
 
 <div class="card">
   <div class="card-h"><h2>Recorded values</h2></div>
@@ -31,7 +64,7 @@
         <td class="nowrap">{{ r.date.strftime('%d %b %Y') }}</td>
         <td class="num">{{ r.total|inr }}</td>
         <td class="num muted">{{ r.statement_total|inr }}</td>
-        {% for key in ('equity_in', 'debt', 'gold') %}<td class="num">{{ r.classes.get(key, 0)|pct(r.total) }}</td>{% endfor %}
+        {% for key in ('equity_in', 'debt', 'gold') %}<td class="num {% if not r.classes %}muted{% endif %}">{% if r.classes %}{{ r.classes.get(key, 0)|pct(r.total) }}{% else %}–{% endif %}</td>{% endfor %}
       </tr>
     {% endfor %}
     </tbody>

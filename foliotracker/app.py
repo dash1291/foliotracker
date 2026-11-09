@@ -315,9 +315,15 @@ def allocation_page(request: Request, by: str = "class"):
 @app.get("/history", response_class=HTMLResponse)
 def history_page(request: Request):
     with Session() as session:
-        portfolio(session)
+        ctx = portfolio(session)
+        points = history.statement_points(session)
+        history.backfill(session, points)
+        if not points or points[-1].date < date.today():
+            points.append(history.current_point(session, ctx["groups"], ctx["manuals"]))
+        years = list(reversed(history.growth_by_year(points)))
+        last_year = history.trailing(points)
         rows = history.series(session)
-        points = [
+        chart = [
             {"date": r.date.isoformat(), "total": float(r.total),
              "classes": {allocation.CLASSES[k]: float(v) for k, v in r.classes.items() if v}}
             for r in rows
@@ -325,7 +331,8 @@ def history_page(request: Request):
         first, last = (rows[0], rows[-1]) if rows else (None, None)
         return templates.TemplateResponse(
             request, "history.html",
-            {"rows": list(reversed(rows)), "points": json.dumps(points), "first": first, "last": last},
+            {"rows": list(reversed(rows)), "points": json.dumps(chart), "first": first, "last": last,
+             "years": years, "last_year": last_year, "today": date.today()},
         )
 
 
