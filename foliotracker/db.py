@@ -217,6 +217,7 @@ class NetWorthHistory(Base):
     statement_total: Mapped[Decimal] = mapped_column(Money)
     by_class: Mapped[str] = mapped_column(Text)
     by_wrapper: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(16), default="live")
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 

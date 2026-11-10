@@ -9,7 +9,14 @@
     <div>
       <div class="label">Net worth over time</div>
       <div class="net">₹ {{ last.total|inr }}</div>
-      <div class="note">{{ first.date.strftime('%d %b %Y') }} to {{ last.date.strftime('%d %b %Y') }} · {{ rows|length }} point{{ 's' if rows|length != 1 }} from statements and days the app was opened</div>
+      <div class="note" id="range-note"></div>
+    </div>
+    <div class="actions">
+      <div class="seg" id="range-seg">
+        <a href="#" data-range="month">Last month</a>
+        <a href="#" data-range="year">Last year</a>
+        <a href="#" data-range="all">All time</a>
+      </div>
     </div>
   </div>
   <div class="card-b" style="padding-top:0">
@@ -57,11 +64,12 @@
   <div class="card-h"><h2>Recorded values</h2></div>
   <div class="card-b flush table-wrap">
   <table>
-    <thead><tr><th>Date</th><th class="num">Net worth</th><th class="num">From statements</th>{% for key, label in CLASSES.items() if key in ('equity_in', 'debt', 'gold') %}<th class="num"><span class="dot" style="--c: var(--c-{{ key }})"></span>{{ label }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th>Date</th><th>Source</th><th class="num">Net worth</th><th class="num">From statements</th>{% for key, label in CLASSES.items() if key in ('equity_in', 'debt', 'gold') %}<th class="num"><span class="dot" style="--c: var(--c-{{ key }})"></span>{{ label }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for r in rows %}
       <tr>
         <td class="nowrap">{{ r.date.strftime('%d %b %Y') }}</td>
+        <td class="muted">{{ 'Statement' if r.source == 'statement' else 'App' }}</td>
         <td class="num">{{ r.total|inr }}</td>
         <td class="num muted">{{ r.statement_total|inr }}</td>
         {% for key in ('equity_in', 'debt', 'gold') %}<td class="num {% if not r.classes %}muted{% endif %}">{% if r.classes %}{{ r.classes.get(key, 0)|pct(r.total) }}{% else %}–{% endif %}</td>{% endfor %}
@@ -74,27 +82,21 @@
 
 <script>
 (function () {
-  const points = {{ points|safe }};
-  if (!points.length) return;
+  const series = {{ points|safe }};
   const svg = document.querySelector('#chart svg');
   const tip = document.getElementById('tooltip');
+  const note = document.getElementById('range-note');
+  const seg = document.getElementById('range-seg');
+  const wrap = document.getElementById('chart');
   const W = 1000, H = 340, L = 70, R = 16, T = 16, B = 36;
-  const xs = points.map(p => new Date(p.date).getTime());
-  const ys = points.map(p => p.total);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs);
-  const yMin = Math.min(...ys), yMax = Math.max(...ys);
-  const pad = (yMax - yMin) * 0.15 || yMax * 0.05 || 1;
-  const yLo = Math.max(0, yMin - pad), yHi = yMax + pad;
-  const X = t => xs.length === 1 ? (L + W - R) / 2 : L + (t - x0) / (x1 - x0) * (W - L - R);
-  const Y = v => T + (yHi - v) / (yHi - yLo) * (H - T - B);
   const ns = 'http://www.w3.org/2000/svg';
-  const el = (tag, attrs, text) => {
-    const e = document.createElementNS(ns, tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    if (text !== undefined) e.textContent = text;
-    svg.appendChild(e);
-    return e;
+  const resolution = { month: 'daily', year: 'weekly', all: 'monthly' };
+  const tickFmt = {
+    month: { day: 'numeric', month: 'short' },
+    year: { month: 'short', year: '2-digit' },
+    all: { month: 'short', year: 'numeric' },
   };
+  const longFmt = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   const inr = v => {
     const s = Math.round(v).toString();
     if (s.length <= 3) return s;
@@ -104,24 +106,55 @@
     return parts.join(',') + ',' + tail;
   };
   const short = v => v >= 1e7 ? (v / 1e7).toFixed(2) + ' Cr' : v >= 1e5 ? (v / 1e5).toFixed(1) + ' L' : inr(v);
-  for (let i = 0; i <= 4; i++) {
-    const v = yLo + (yHi - yLo) * i / 4;
-    el('line', { x1: L, x2: W - R, y1: Y(v), y2: Y(v), class: 'grid' });
-    el('text', { x: L - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'axis' }, short(v));
+  let state = null;
+
+  function draw(range) {
+    const points = series[range] || [];
+    svg.replaceChildren();
+    seg.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.range === range));
+    if (!points.length) {
+      note.textContent = 'No points in this range yet.';
+      state = null;
+      return;
+    }
+    note.textContent = `${longFmt(points[0].date)} to ${longFmt(points[points.length - 1].date)} · ${points.length} ${resolution[range]} point${points.length === 1 ? '' : 's'}`;
+    const el = (tag, attrs, text) => {
+      const e = document.createElementNS(ns, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text !== undefined) e.textContent = text;
+      svg.appendChild(e);
+      return e;
+    };
+    const xs = points.map(p => new Date(p.date).getTime());
+    const ys = points.map(p => p.total);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const yMin = Math.min(...ys), yMax = Math.max(...ys);
+    const pad = (yMax - yMin) * 0.15 || yMax * 0.02 || 1;
+    const yLo = Math.max(0, yMin - pad), yHi = yMax + pad;
+    const X = t => xs.length === 1 ? (L + W - R) / 2 : L + (t - x0) / (x1 - x0) * (W - L - R);
+    const Y = v => T + (yHi - v) / (yHi - yLo) * (H - T - B);
+    for (let i = 0; i <= 4; i++) {
+      const v = yLo + (yHi - yLo) * i / 4;
+      el('line', { x1: L, x2: W - R, y1: Y(v), y2: Y(v), class: 'grid' });
+      el('text', { x: L - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'axis' }, short(v));
+    }
+    const ticks = xs.length <= 6 ? xs : [0, 1, 2, 3, 4, 5].map(i => xs[Math.round(i * (xs.length - 1) / 5)]);
+    ticks.forEach(t => el('text', { x: X(t), y: H - B + 20, 'text-anchor': 'middle', class: 'axis' },
+      new Date(t).toLocaleDateString('en-IN', tickFmt[range])));
+    if (points.length > 1) {
+      const path = points.map((p, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(p.total).toFixed(1)).join(' ');
+      el('path', { d: path + ` L ${X(x1).toFixed(1)} ${Y(yLo)} L ${X(x0).toFixed(1)} ${Y(yLo)} Z`, class: 'area' });
+      el('path', { d: path, class: 'line' });
+    }
+    points.forEach((p, i) => el('circle', { cx: X(xs[i]), cy: Y(p.total), r: points.length > 60 ? 2.5 : 4, class: 'dot-m' }));
+    const cross = el('line', { y1: T, y2: H - B, class: 'crosshair' });
+    const focus = el('circle', { r: 6, class: 'dot-m', style: 'display:none' });
+    state = { points, xs, X, Y, cross, focus };
   }
-  const fmt = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
-  const ticks = xs.length <= 6 ? xs : [0, 1, 2, 3, 4, 5].map(i => xs[Math.round(i * (xs.length - 1) / 5)]);
-  ticks.forEach(t => el('text', { x: X(t), y: H - B + 20, 'text-anchor': 'middle', class: 'axis' }, fmt(t)));
-  if (points.length > 1) {
-    const path = points.map((p, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(p.total).toFixed(1)).join(' ');
-    el('path', { d: path + ` L ${X(x1).toFixed(1)} ${Y(yLo)} L ${X(x0).toFixed(1)} ${Y(yLo)} Z`, class: 'area' });
-    el('path', { d: path, class: 'line' });
-  }
-  points.forEach((p, i) => el('circle', { cx: X(xs[i]), cy: Y(p.total), r: 4, class: 'dot-m' }));
-  const cross = el('line', { y1: T, y2: H - B, class: 'crosshair' });
-  const focus = el('circle', { r: 6, class: 'dot-m', style: 'display:none' });
-  const wrap = document.getElementById('chart');
+
   wrap.addEventListener('pointermove', ev => {
+    if (!state) return;
+    const { points, xs, X, Y, cross, focus } = state;
     const rect = svg.getBoundingClientRect();
     const px = (ev.clientX - rect.left) / rect.width * W;
     let best = 0;
@@ -130,7 +163,7 @@
     cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.display = 'block';
     focus.setAttribute('cx', cx); focus.setAttribute('cy', cy); focus.style.display = 'block';
     tip.replaceChildren();
-    const b = document.createElement('b'); b.textContent = fmt(p.date); tip.appendChild(b);
+    const b = document.createElement('b'); b.textContent = longFmt(p.date); tip.appendChild(b);
     const v = document.createElement('div'); v.textContent = '₹ ' + inr(p.total); tip.appendChild(v);
     for (const k in p.classes) {
       const row = document.createElement('div');
@@ -138,11 +171,27 @@
       row.textContent = k + ' ' + (p.classes[k] / p.total * 100).toFixed(1) + '%';
       tip.appendChild(row);
     }
+    if (p.source === 'statement') {
+      const s = document.createElement('div'); s.className = 'muted'; s.textContent = 'from statement'; tip.appendChild(s);
+    }
     tip.style.display = 'block';
     const left = cx / W * rect.width;
     tip.style.transform = `translate(${left + (left > rect.width * 0.7 ? -tip.offsetWidth - 12 : 12)}px, ${cy / H * rect.height - 10}px)`;
   });
-  wrap.addEventListener('pointerleave', () => { cross.style.display = 'none'; focus.style.display = 'none'; tip.style.display = 'none'; });
+  wrap.addEventListener('pointerleave', () => {
+    if (!state) return;
+    state.cross.style.display = 'none'; state.focus.style.display = 'none'; tip.style.display = 'none';
+  });
+  seg.addEventListener('click', ev => {
+    const a = ev.target.closest('a[data-range]');
+    if (!a) return;
+    ev.preventDefault();
+    try { localStorage.setItem('historyRange', a.dataset.range); } catch (e) {}
+    draw(a.dataset.range);
+  });
+  let initial = 'year';
+  try { const saved = localStorage.getItem('historyRange'); if (series[saved]) initial = saved; } catch (e) {}
+  draw(initial);
 })();
 </script>
 {% endif %}

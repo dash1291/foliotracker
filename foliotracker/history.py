@@ -21,6 +21,7 @@ def record(session: Session, total: Decimal, statement_total: Decimal, by_class:
     row.statement_total = statement_total
     row.by_class = json.dumps({k: str(v) for k, v in by_class.items()})
     row.by_wrapper = json.dumps({k: str(v) for k, v in by_wrapper.items()})
+    row.source = "live"
     row.recorded_at = datetime.now()
     session.commit()
     return row
@@ -178,13 +179,44 @@ def trailing(points: list[Point], days: int = 365) -> Change | None:
 
 
 def backfill(session: Session, points: list[Point]) -> int:
-    added = 0
+    """Write one statement-sourced row per statement date, recomputed on every call so
+    later manual balances reach the chart. A live row on the same date is left alone."""
+    written = 0
     for p in points:
-        if session.scalar(select(NetWorthHistory).where(NetWorthHistory.date == p.date)) is None:
-            session.add(NetWorthHistory(
-                date=p.date, total=p.total, statement_total=sum((v for _, _, v in p.positions.values()), Decimal(0)),
-                by_class="{}", by_wrapper="{}", recorded_at=datetime.now(),
-            ))
-            added += 1
+        row = session.scalar(select(NetWorthHistory).where(NetWorthHistory.date == p.date))
+        if row is not None and row.source != "statement":
+            continue
+        if row is None:
+            row = NetWorthHistory(date=p.date, source="statement", by_class="{}", by_wrapper="{}")
+            session.add(row)
+        row.total = p.total
+        row.statement_total = sum((v for _, _, v in p.positions.values()), Decimal(0))
+        row.recorded_at = datetime.now()
+        written += 1
     session.commit()
-    return added
+    return written
+
+
+RANGES = ("month", "year", "all")
+
+
+def resample(rows: list[NetWorthHistory], today: date | None = None) -> dict[str, list[NetWorthHistory]]:
+    """Last month at daily resolution, last year one point per ISO week, all time one
+    point per calendar month. Each bucket keeps its latest row, since net worth is a
+    balance at a point in time rather than a flow to average."""
+    today = today or date.today()
+    rows = sorted(rows, key=lambda r: r.date)
+
+    def last_per(bucket, subset):
+        picked: dict = {}
+        for r in subset:
+            picked[bucket(r.date)] = r
+        return list(picked.values())
+
+    month_start = date.fromordinal(today.toordinal() - 31)
+    year_start = date.fromordinal(today.toordinal() - 365)
+    return {
+        "month": [r for r in rows if r.date >= month_start],
+        "year": last_per(lambda d: d.isocalendar()[:2], [r for r in rows if r.date >= year_start]),
+        "all": last_per(lambda d: (d.year, d.month), rows),
+    }

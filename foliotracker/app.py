@@ -323,11 +323,14 @@ def history_page(request: Request):
         years = list(reversed(history.growth_by_year(points)))
         last_year = history.trailing(points)
         rows = history.series(session)
-        chart = [
-            {"date": r.date.isoformat(), "total": float(r.total),
-             "classes": {allocation.CLASSES[k]: float(v) for k, v in r.classes.items() if v}}
-            for r in rows
-        ]
+        chart = {
+            key: [
+                {"date": r.date.isoformat(), "total": float(r.total), "source": r.source,
+                 "classes": {allocation.CLASSES[k]: float(v) for k, v in r.classes.items() if v}}
+                for r in subset
+            ]
+            for key, subset in history.resample(rows).items()
+        }
         first, last = (rows[0], rows[-1]) if rows else (None, None)
         return templates.TemplateResponse(
             request, "history.html",
