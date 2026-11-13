@@ -125,6 +125,16 @@ td.nowrap { white-space: nowrap; }
 .chip.manual { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .chip.good { color: var(--good); border-color: var(--good); }
 
+form.inline { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; }
+form.inline input { width: auto; padding: 4px 8px; font-size: 13px; }
+form.inline button { padding: 4px 10px; font-size: 12.5px; }
+.card-h details.act { font-size: 12.5px; color: var(--muted); }
+.card-h details.act summary { cursor: pointer; list-style: none; }
+.card-h details.act summary::-webkit-details-marker { display: none; }
+.card-h details.act summary:hover { color: var(--ink); }
+.card-h details.act[open] summary { display: none; }
+.closed-list { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; font-size: 13px; }
+
 .flash { padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .flash.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--ink); }
 

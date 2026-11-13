@@ -71,6 +71,28 @@ def resolve_positions(items: list[tuple[Position, ImportRun]]) -> tuple[list[Pos
     return positions, base_run, sources
 
 
+def closed_dates(rows: list[tuple[Position, ImportRun]], accounts: dict[int, Account]) -> dict[int, date]:
+    """An account missing from the newest full statement of the source that used to list it
+    is closed as of that statement's period end. A date set by hand on the account also closes
+    it; positions dated before the closing date are stale, later ones stand."""
+    full = [(pos, run) for pos, run in rows if run.covered_kinds is None]
+    newest: dict[bool, ImportRun] = {}
+    for _pos, run in full:
+        latest = newest.get(run.is_rta)
+        if latest is None or (run.period_to, run.id) > (latest.period_to, latest.id):
+            newest[run.is_rta] = run
+    listed = {(run.id, pos.account_id) for pos, run in full}
+    closed: dict[int, date] = {}
+    for pos, run in full:
+        latest = newest[run.is_rta]
+        if (latest.id, pos.account_id) not in listed:
+            closed[pos.account_id] = max(closed.get(pos.account_id, latest.period_to), latest.period_to)
+    for acct in accounts.values():
+        if acct.closed_as_of:
+            closed[acct.id] = max(closed.get(acct.id, acct.closed_as_of), acct.closed_as_of)
+    return closed
+
+
 def _attach_current(session: Session, positions: list[Position]) -> None:
     ids = {p.instrument_id for p in positions}
     latest: dict[int, Valuation] = {}
@@ -94,13 +116,21 @@ def latest_holdings(session: Session) -> list[AccountHoldings]:
     by_account: dict[int, list[tuple[Position, ImportRun]]] = {}
     for pos, run in rows:
         by_account.setdefault(pos.account_id, []).append((pos, run))
+    accounts = {a.id: a for a in session.scalars(select(Account).where(Account.id.in_(by_account)))}
+    closed = closed_dates(rows, accounts)
 
     result = []
     for account_id, items in by_account.items():
+        if account_id in closed:
+            items = [(p, r) for p, r in items if p.as_of >= closed[account_id]]
+        if not items:
+            continue
         positions, base_run, sources = resolve_positions(items)
-        account = session.get(Account, account_id)
-        as_of = max((p.as_of for p in positions), default=date.today())
-        result.append(AccountHoldings(account, as_of, base_run, positions, sources))
+        positions = [p for p in positions if p.quantity]
+        if not positions:
+            continue
+        as_of = max(p.as_of for p in positions)
+        result.append(AccountHoldings(accounts[account_id], as_of, base_run, positions, sources))
     _attach_current(session, [p for h in result for p in h.positions])
     result.sort(key=lambda h: (h.account.wrapper, h.account.display_name))
     return result

@@ -82,6 +82,7 @@ class Account(Base):
     manual: Mapped[bool] = mapped_column(default=False)
     statement_total: Mapped[Decimal | None] = mapped_column(Money)
     statement_total_as_of: Mapped[date | None] = mapped_column(Date)
+    closed_as_of: Mapped[date | None] = mapped_column(Date)
 
     positions: Mapped[list[Position]] = relationship(back_populates="account")
     snapshots: Mapped[list[Snapshot]] = relationship(back_populates="account", cascade="all, delete-orphan")

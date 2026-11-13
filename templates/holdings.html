@@ -81,6 +81,16 @@
     {% if not g.has_overlay and g.account.statement_total is not none and g.account.statement_total != g.total %}<span class="chip warn">statement says ₹ {{ g.account.statement_total|inr }}</span>{% endif %}
     <span class="meta">{{ [g.account.holders|title if g.account.holders else none, g.account.institution|title ~ ' · ' ~ g.account.identifier]|select|join(' · ') }}</span>
     <span class="total">₹ {{ g.current_total|inr }}</span>
+    {% if g.account.closed_as_of %}
+    <form method="post" action="/accounts/{{ g.account.id }}/closed" class="inline"><span class="chip">marked redeemed {{ g.account.closed_as_of.strftime('%d %b %Y') }}, statement since then shows units</span><button type="submit">Clear</button></form>
+    {% else %}
+    <details class="act"><summary>Redeemed?</summary>
+      <form method="post" action="/accounts/{{ g.account.id }}/closed" class="inline">
+        <input type="date" name="closed_as_of" value="{{ today.isoformat() }}" max="{{ today.isoformat() }}" required>
+        <button type="submit">Hide until a later statement</button>
+      </form>
+    </details>
+    {% endif %}
   </div>
   <div class="card-b flush table-wrap">
   <table>
@@ -107,5 +117,14 @@
 </div>
 {% endif %}
 {% endfor %}
+
+{% if closed %}
+<div class="card"><div class="card-b closed-list">
+  <span class="muted">Redeemed, waiting for a later statement:</span>
+  {% for a in closed %}
+  <form method="post" action="/accounts/{{ a.id }}/closed" class="inline">{{ a|account_title }} <span class="muted">on {{ a.closed_as_of.strftime('%d %b %Y') }}</span><button type="submit">Undo</button></form>
+  {% endfor %}
+</div></div>
+{% endif %}
 {% endif %}
 {% endblock %}

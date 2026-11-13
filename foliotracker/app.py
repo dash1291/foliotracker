@@ -122,6 +122,11 @@ def holdings(request: Request, ok: str | None = None, error: str | None = None):
         ctx["top_classes"] = [
             (k, v) for k, v in sorted(ctx["b"].by_class.items(), key=lambda kv: -kv[1]) if v > 0
         ]
+        shown = {g.account.id for g in ctx["groups"]}
+        ctx["closed"] = [
+            a for a in session.scalars(select(Account).where(Account.closed_as_of.is_not(None)).order_by(Account.closed_as_of))
+            if a.id not in shown
+        ]
         ctx.update(ok=ok, error=error or ctx["kite_warning"], kite_connected=kite.current_session(session) is not None,
                    kite_configured=bool(os.environ.get("KITE_API_KEY")))
         return templates.TemplateResponse(request, "holdings.html", ctx)
@@ -280,6 +285,26 @@ async def delete_account(request: Request, account_id: int):
             session.delete(acct)
             session.commit()
     return RedirectResponse("/", status_code=303)
+
+
+@app.post("/accounts/{account_id}/closed")
+async def close_account(request: Request, account_id: int):
+    form = await request.form()
+    with Session() as session:
+        acct = session.get(Account, account_id)
+        if acct is None:
+            return RedirectResponse("/", status_code=303)
+        try:
+            acct.closed_as_of = date.fromisoformat(form["closed_as_of"]) if form.get("closed_as_of") else None
+        except ValueError:
+            return RedirectResponse("/?error=the redemption date must be a valid date", status_code=303)
+        session.commit()
+        name = account_title(acct)
+        if acct.closed_as_of:
+            msg = f"{name} marked redeemed on {acct.closed_as_of:%d %b %Y}; a statement dated after that takes over"
+        else:
+            msg = f"{name} is no longer marked redeemed"
+    return RedirectResponse(f"/?ok={msg}", status_code=303)
 
 
 @app.post("/prices/refresh")
